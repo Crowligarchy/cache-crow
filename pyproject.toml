@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cache-crow"
+version = "0.1.0"
+description = "Scan and extract media from Electron app caches (Discord, etc.)"
+requires-python = ">=3.10"
+dependencies = [
+    "rich>=13.0",
+]
+
+[project.scripts]
+cache-crow = "cache_crow.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cache_crow"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
