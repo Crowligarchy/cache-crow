@@ -31,12 +31,11 @@
 
 ## In Progress
 
-- [ ] Initial Discord cache scanner + extractor MVP
-
 ---
 
 ## Done
 
+- [x] Initial Discord cache scanner + extractor MVP (14/14 tests passing)
 - [x] Research original cache-monkey architecture
 - [x] Research Discord cache paths on Linux (LevelDB in `~/.config/discord/Cache/Cache_Data/`)
 - [x] Research CLI Discord clients (discordo — actively maintained TUI)
