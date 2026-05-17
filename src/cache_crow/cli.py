@@ -61,8 +61,45 @@ def main() -> None:
         action="store_true",
         help="Print summary stats only (no file table)",
     )
+    parser.add_argument(
+        "--metadata",
+        action="store_true",
+        help="Enrich entries with LevelDB/cache header metadata (CDN URLs, guild/channel IDs)",
+    )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Watch cache directory for new files in real time (press Ctrl+C to stop)",
+    )
+    parser.add_argument(
+        "--watch-all",
+        action="store_true",
+        help="In watch mode, show all files (not just media)",
+    )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Launch interactive Textual TUI browser",
+    )
 
     args = parser.parse_args()
+
+    # --- Watch mode ---
+    if args.watch:
+        dirs = resolve_cache_dirs(args.app, args.cache_dir)
+        output_dir = Path(args.output_dir).expanduser() if args.output_dir else None
+
+        from .watcher import CacheWatcher
+
+        for cache_dir in dirs:
+            console.print(f"[bold]Watching:[/bold] {cache_dir}")
+            watcher = CacheWatcher(
+                cache_dir=cache_dir,
+                output_dir=output_dir,
+                show_all=args.watch_all,
+            )
+            watcher.run()
+        return
 
     dirs = resolve_cache_dirs(args.app, args.cache_dir)
 
@@ -70,8 +107,36 @@ def main() -> None:
     for cache_dir in dirs:
         all_entries.extend(scan_cache(cache_dir))
 
+    # --- Metadata enrichment ---
+    if args.metadata:
+        from .metadata import enrich_entries_with_metadata
+
+        for cache_dir in dirs:
+            dir_entries = [e for e in all_entries if e.path.parent == cache_dir]
+            enrich_entries_with_metadata(dir_entries, cache_dir)
+
+        enriched = sum(1 for e in all_entries if e.metadata and e.metadata.url)
+        if enriched:
+            console.print(
+                f"[green]Metadata:[/green] enriched {enriched} of {len(all_entries)} entries with CDN URLs"
+            )
+        else:
+            console.print(
+                "[yellow]Metadata:[/yellow] no CDN URLs found "
+                "(LevelDB index may be absent or cache files have no headers)"
+            )
+
     media_entries = [e for e in all_entries if e.mime_type in MEDIA_TYPES]
 
+    # --- TUI mode ---
+    if args.tui:
+        from .tui import launch_tui
+
+        output_dir = Path(args.output_dir).expanduser() if args.output_dir else None
+        launch_tui(all_entries, output_dir=output_dir)
+        return
+
+    # --- Stats mode ---
     if args.stats:
         by_type: dict[str, int] = {}
         total_size = 0
@@ -94,8 +159,27 @@ def main() -> None:
             for mime, count in sorted(by_type.items(), key=lambda x: -x[1]):
                 type_table.add_row(mime, str(count))
             console.print(type_table)
+
+        if args.metadata:
+            meta_entries = [e for e in all_entries if e.metadata and e.metadata.url]
+            if meta_entries:
+                meta_table = Table(title="CDN URLs Recovered", show_lines=True)
+                meta_table.add_column("File", style="cyan")
+                meta_table.add_column("Guild ID")
+                meta_table.add_column("Channel ID")
+                meta_table.add_column("URL", style="green")
+                for e in meta_entries[:20]:
+                    m = e.metadata
+                    meta_table.add_row(
+                        e.path.name,
+                        m.guild_id or "-",
+                        m.channel_id or "-",
+                        (m.url or "")[:60],
+                    )
+                console.print(meta_table)
         return
 
+    # --- Extract mode ---
     if args.output_dir:
         output_dir = Path(args.output_dir).expanduser()
         for cache_dir in dirs:
@@ -121,14 +205,26 @@ def main() -> None:
         console.print(f"\n[bold]Output:[/bold] {output_dir}")
         return
 
-    # Default: print table of found media
+    # --- Default: print table of found media ---
     table = Table(title=f"Media in {args.app} cache", show_lines=True)
     table.add_column("Filename", style="cyan", no_wrap=True)
     table.add_column("Type")
     table.add_column("Size", justify="right")
 
+    if args.metadata:
+        table.add_column("CDN URL", style="green")
+        table.add_column("Guild ID")
+        table.add_column("Channel ID")
+
     for e in sorted(media_entries, key=lambda x: x.size, reverse=True):
-        table.add_row(e.path.name, e.mime_type, fmt_size(e.size))
+        if args.metadata:
+            m = e.metadata
+            url = (m.url or "")[:50] if m else ""
+            guild = m.guild_id or "-" if m else "-"
+            channel = m.channel_id or "-" if m else "-"
+            table.add_row(e.path.name, e.mime_type, fmt_size(e.size), url, guild, channel)
+        else:
+            table.add_row(e.path.name, e.mime_type, fmt_size(e.size))
 
     console.print(table)
     console.print(f"[bold]Media files found:[/bold] {len(media_entries)} of {len(all_entries)} total")

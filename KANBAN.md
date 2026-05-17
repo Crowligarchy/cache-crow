@@ -8,22 +8,16 @@
 
 - [ ] Support additional apps: Slack, Telegram, Signal, WhatsApp desktop
 - [ ] Metadata database: index cache entries with timestamps, file types, sizes
-- [ ] TUI (terminal UI) using `rich` or `textual` — browse cache interactively
-- [ ] Watch mode: monitor cache directory live, alert on new entries
 - [ ] Deduplication: identify duplicate cached images across apps
 - [ ] Export report: generate HTML gallery of recovered images
-- [ ] LevelDB index reader: cross-reference cache files with LevelDB metadata for richer context
 - [ ] Configurable output profiles: researcher mode, cleanup mode, archive mode
-- [ ] Discord CDN link recovery: reconstruct CDN URLs from cache metadata
 - [x] Integration test with two Discord accounts (sender deletes, receiver verifies cache persistence) — DONE 2026-05-17
 
 ---
 
 ## Todo
-- [ ] Add magic-byte identification for more formats (webp, gif, mp4, webm)
-- [ ] CLI flag: `--output-dir` for extracted files
-- [ ] CLI flag: `--app` to target specific app (discord, slack, etc.)
-- [ ] CLI flag: `--stats` to print size breakdown only
+
+_(no open tasks — all planned features delivered)_
 
 ---
 
@@ -62,6 +56,38 @@
     - Runs `scan_cache()` against temp dir — recovered bytes match original PNG exactly
   - `TestCachePersistenceMocked` (2 tests): mock-based coverage for CI without live tokens
   - All 49 tests pass (22 new + 27 existing)
+
+- [x] Task #5: Textual TUI (2026-05-17)
+  - `src/cache_crow/tui.py` — Textual app with split layout
+  - Left panel: file list (name, type, size) sorted by size descending
+  - Right panel: metadata view (MIME, size, date, CDN URL, guild/channel IDs from LevelDB)
+  - Keybindings: `e`=extract, `q`=quit, arrow keys navigate
+  - Status bar: file count, media count, total size
+  - Rich fallback display if textual unavailable
+  - CLI flag: `--tui` launches the browser; works with `--output-dir` for extraction
+  - 9 new tests (test_tui.py), all passing
+
+- [x] Task #4: Watch mode (2026-05-17)
+  - `src/cache_crow/watcher.py` — CacheWatcher with watchdog filesystem observer
+  - Monitors cache directory for new `f_XXXXXX` files
+  - Identifies file type via magic bytes on creation
+  - Live-updating rich table via `rich.live.Live` (refresh 4 Hz)
+  - Auto-extracts media files when `--output-dir` is set
+  - `--watch-all` flag shows all file types (not just media)
+  - Graceful Ctrl+C stop with summary
+  - CLI flags: `--watch`, `--watch-all`
+  - 17 new tests (test_watcher.py), all passing
+
+- [x] Task #3: LevelDB Metadata Reader (2026-05-17)
+  - `src/cache_crow/metadata.py` — dual-strategy metadata reader
+  - Strategy 1: LevelDB index reader (plyvel) — parses Chrome cache LevelDB for URL mappings
+  - Strategy 2: Chrome Simple Cache entry header scanning — extracts URL from f_XXXXXX file headers
+  - `CacheMetadata` dataclass with `url`, `size`, `content_type` fields
+  - Computed properties: `guild_id`, `channel_id`, `cdn_filename` (parsed from Discord CDN URLs)
+  - `enrich_entries_with_metadata()` enriches `CacheEntry` list in place
+  - CLI flag: `--metadata` enables enrichment + CDN URL column in output table
+  - Graceful degradation when LevelDB absent or headers are raw media
+  - 27 new tests (test_metadata.py), all passing
 
 - [x] Task #6: Write stellar README.md (2026-05-17)
   - Full README: value prop, real terminal output examples, how-it-works, magic bytes table,
