@@ -17,7 +17,7 @@ The last 48 bytes are always the two EOF records:
 import struct
 from pathlib import Path
 
-SIMPLE_CACHE_HEADER_MAGIC: int = 0xF5A26FE8C7A20300
+SIMPLE_CACHE_HEADER_MAGIC: int = 0xF27BC9AC443AAB97
 SIMPLE_CACHE_EOF_MAGIC: int = 0xF4FA6F7EFAF3F4F9
 HEADER_SIZE: int = 24
 EOF_SIZE: int = 24
