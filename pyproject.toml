@@ -9,6 +9,9 @@ description = "Scan and extract media from Electron app caches (Discord, etc.)"
 requires-python = ">=3.10"
 dependencies = [
     "rich>=13.0",
+    "watchdog>=4.0",
+    "textual>=0.60",
+    "plyvel>=1.5",
 ]
 
 [project.scripts]
@@ -19,6 +22,9 @@ packages = ["src/cache_crow"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: live Discord API tests (require DISCORD_TOKEN_B and DISCORD_TEST_CHANNEL_ID)",
+]
 
 [tool.ruff]
 line-length = 100
