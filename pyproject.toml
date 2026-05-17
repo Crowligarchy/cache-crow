@@ -6,13 +6,39 @@ build-backend = "hatchling.build"
 name = "cache-crow"
 version = "0.1.0"
 description = "Scan and extract media from Electron app caches (Discord, etc.)"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
+keywords = ["discord", "cache", "forensics", "cli", "electron", "media", "recovery"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Filesystems",
+    "Topic :: Utilities",
+]
 dependencies = [
     "rich>=13.0",
     "watchdog>=4.0",
-    "textual>=0.60",
-    "plyvel>=1.5",
 ]
+
+[project.optional-dependencies]
+leveldb = ["plyvel>=1.5"]
+tui = ["textual>=1.0"]
+dev = ["pytest", "ruff", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/Crowligarchy/cache-crow"
+Repository = "https://github.com/Crowligarchy/cache-crow"
+"Bug Tracker" = "https://github.com/Crowligarchy/cache-crow/issues"
 
 [project.scripts]
 cache-crow = "cache_crow.cli:main"

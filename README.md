@@ -6,10 +6,14 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/Crowligarchy/cache-crow?style=social)](https://github.com/Crowligarchy/cache-crow/stargazers)
 
-Discord caches every image, GIF, and video you view — on your local disk, without
-extensions, as raw binary blobs. When someone deletes a message, the file stays.
-cache-crow finds them, identifies them by magic bytes, and extracts them with the
-right extension.
+Discord caches every image, GIF, and video you view — on your local disk, as raw
+binary blobs, with no extensions. **When someone deletes a message, the media file
+stays on disk.** This is not a bug — it is how every Chromium-based app works. The
+cache persists for days or weeks after deletion, long enough to matter in DFIR
+investigations, privacy audits, and personal recovery.
+
+cache-crow finds those files, identifies them by magic bytes, and extracts them with
+the correct extension. No accounts. No network access. No guesswork.
 
 Works on Linux, macOS, and Windows. Targets Discord and Slack today, more apps coming.
 
@@ -90,14 +94,14 @@ Output: ./recovered
 ## Install
 
 ```bash
-# from PyPI (coming soon)
-pip install cache-crow
+# recommended — isolated install, no venv required
+pipx install git+https://github.com/Crowligarchy/cache-crow
 
-# from source
+# or with pip into your environment
 pip install git+https://github.com/Crowligarchy/cache-crow
 
-# or with pipx (recommended for CLI tools)
-pipx install git+https://github.com/Crowligarchy/cache-crow
+# PyPI (publishing in progress — use the git URL above for now)
+# pip install cache-crow
 ```
 
 ---
@@ -123,8 +127,6 @@ cache-crow --cache-dir /path/to/Cache_Data
 # combine flags
 cache-crow --app discord --output-dir ./out --stats
 ```
-
-Flags coming soon (in active development):
 
 ```bash
 cache-crow --watch        # live monitoring mode: alert when new files appear
@@ -229,11 +231,9 @@ a GUI. cache-crow is different:
 | Active maintenance   | Yes        | Abandoned 2019-22 |
 | Magic-byte detection | Yes        | Extension rename  |
 | Multiple apps        | Yes        | Discord-only      |
-| Python, no deps*     | Yes        | Varies            |
-| TUI (coming)         | Yes        | No                |
-| LevelDB metadata (coming) | Yes   | No                |
-
-*runtime deps: `rich` for terminal output only
+| Minimal deps (rich)  | Yes        | Varies            |
+| TUI browser          | Yes        | No                |
+| LevelDB metadata     | Yes (opt-in) | No              |
 
 ---
 

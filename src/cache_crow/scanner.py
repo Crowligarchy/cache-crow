@@ -1,16 +1,58 @@
+import os
+import platform
 from pathlib import Path
 from .models import CacheEntry
 
-CACHE_PATHS: dict[str, list[Path]] = {
-    "discord": [
-        Path.home() / ".config" / "discord" / "Cache" / "Cache_Data",
-        Path.home() / ".config" / "discordcanary" / "Cache" / "Cache_Data",
-        Path.home() / ".config" / "discordptb" / "Cache" / "Cache_Data",
-    ],
-    "slack": [
-        Path.home() / ".config" / "Slack" / "Cache" / "Cache_Data",
-    ],
-}
+
+def _get_cache_paths() -> dict[str, list[Path]]:
+    system = platform.system()
+
+    if system == "Darwin":
+        app_support = Path.home() / "Library" / "Application Support"
+        return {
+            "discord": [
+                app_support / "discord" / "Cache" / "Cache_Data",
+                app_support / "discordcanary" / "Cache" / "Cache_Data",
+                app_support / "discordptb" / "Cache" / "Cache_Data",
+            ],
+            "slack": [
+                app_support / "Slack" / "Cache" / "Cache_Data",
+            ],
+        }
+
+    if system == "Windows":
+        appdata = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        localappdata = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return {
+            "discord": [
+                appdata / "discord" / "Cache" / "Cache_Data",
+                appdata / "discordcanary" / "Cache" / "Cache_Data",
+                appdata / "discordptb" / "Cache" / "Cache_Data",
+                localappdata / "discord" / "Cache" / "Cache_Data",
+                localappdata / "discordcanary" / "Cache" / "Cache_Data",
+                localappdata / "discordptb" / "Cache" / "Cache_Data",
+            ],
+            "slack": [
+                appdata / "Slack" / "Cache" / "Cache_Data",
+                localappdata / "Slack" / "Cache" / "Cache_Data",
+            ],
+        }
+
+    # Linux (default)
+    config = Path.home() / ".config"
+    return {
+        "discord": [
+            config / "discord" / "Cache" / "Cache_Data",
+            config / "discordcanary" / "Cache" / "Cache_Data",
+            config / "discordptb" / "Cache" / "Cache_Data",
+        ],
+        "slack": [
+            config / "Slack" / "Cache" / "Cache_Data",
+        ],
+    }
+
+
+CACHE_PATHS: dict[str, list[Path]] = _get_cache_paths()
 
 MIME_EXTENSIONS: dict[str, str] = {
     "image/png": ".png",
@@ -30,7 +72,8 @@ def find_cache_dirs(app: str = "discord") -> list[Path]:
 
 def identify_file_type(path: Path) -> str:
     try:
-        data = path.read_bytes()
+        with path.open("rb") as f:
+            data = f.read(8192)
     except (OSError, PermissionError):
         return "application/octet-stream"
 
