@@ -23,18 +23,16 @@ _(no open tasks — all planned features delivered)_
 
 ## In Progress
 
-### discordo live-login blocked by hCaptcha (2026-05-08)
-- **Goal**: Log into Discord test account (`sddozezjaffq@wshu.net`) via discordo CLI, seed cache with real media
-- **Blocker**: Discord API `/auth/login` returns `captcha-required` (hCaptcha) on every automated request, including with CF clearance cookies
-  - Tried: requests with realistic headers, Playwright Firefox with CF cookies, Playwright Chromium headless
-  - Discord remote-auth (QR code) login requires a mobile device to scan — not automatable headlessly
-  - `DISCORDO_TOKEN` env var is supported by discordo but we cannot obtain the token without passing captcha
-- **Status**: Synthetic cache used for testing (see Done). Real live login requires human captcha solve or dedicated hCaptcha solving service (2captcha, anti-captcha)
-- **Next step**: Add `DISCORD_TOKEN` to `credentials.env` after manual login; or use 2captcha API
+_(no tasks in progress)_
 
 ---
 
 ## Done
+
+- [x] Task #6: Chrome Simple Cache stream parser (simple_cache.py) — 13 tests, extract_stream1() correctly strips Chrome wrapper from f_XXXXXX files (2026-05-17)
+- [x] Task #7: Chrome Simple Cache index file parser (index_parser.py) — 11 tests, parse_index() reads binary index → URL hash + timestamps (2026-05-17)
+- [x] Task #8: Extractor stream stripping fix (extractor.py) — extract_media() now writes clean media bytes instead of Chrome-wrapped blobs; 8 new tests (2026-05-17)
+- [x] discordo live-login blocked by hCaptcha — Superseded — token extraction via headless browser now used instead. (2026-05-17)
 
 - [x] Task 1: Discord test server + two-account communication (2026-05-17)
   - Guild `cache-crow-test` created by cachecrow_beta (Account B) — Account A blocked by Discord verification requirement (code 40002)
