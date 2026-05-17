@@ -25,6 +25,7 @@ testpaths = ["tests"]
 markers = [
     "integration: live Discord API tests (require DISCORD_TOKEN_B and DISCORD_TEST_CHANNEL_ID)",
 ]
+# Run full suite including integration: source ~/.crowligarchy/credentials.env && export DISCORD_TOKEN_B DISCORD_TEST_CHANNEL_ID && python -m pytest
 
 [tool.ruff]
 line-length = 100

@@ -1,0 +1,25 @@
+services:
+  cache-crow:
+    build:
+      context: ..          # project root — so COPY . /app/cache-crow works
+      dockerfile: docker/Dockerfile
+    image: cache-crow:latest
+    container_name: cache-crow
+
+    # Discord needs /dev/shm of reasonable size for Chromium shared memory
+    shm_size: "256m"
+
+    environment:
+      # How long to let Discord run before killing it (seconds)
+      DISCORD_WAIT: "18"
+      # Cache path inside the container — change if Discord puts it elsewhere
+      CACHE_DIR: "/root/.config/discord/Cache/Cache_Data"
+
+    # Optional: mount your HOST Discord cache so there's actually data to scan.
+    # Uncomment and adjust the host path:
+    #
+    # volumes:
+    #   - "${HOME}/.config/discord/Cache:/root/.config/discord/Cache:ro"
+
+    # Run once and exit
+    restart: "no"
