@@ -1,14 +1,57 @@
 import argparse
+import json
 import sys
 from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
 
+from . import __version__
 from .extractor import extract_media, MEDIA_TYPES
 from .scanner import find_cache_dirs, scan_cache, MIME_EXTENSIONS
 
 console = Console()
+
+_EPILOG = """
+examples:
+  # scan your Discord cache, show a table of all found media
+  cache-crow
+
+  # quick stats: counts and sizes, no file listing
+  cache-crow --stats
+
+  # extract all media >=1 KB to ./recovered/ with correct extensions
+  cache-crow --output-dir ./recovered
+
+  # target Slack instead of Discord
+  cache-crow --app slack
+
+  # point at an arbitrary cache directory (forensics, other users' profiles)
+  cache-crow --cache-dir /path/to/Cache_Data
+
+  # machine-readable JSON output (pipe-friendly)
+  cache-crow --format json | jq '.[] | select(.mime_type == "video/mp4")'
+
+  # enrich results with CDN URLs from cache entry headers
+  cache-crow --metadata
+
+  # live-monitoring mode: alert as new cache files appear
+  cache-crow --watch --output-dir ./live-capture
+
+  # interactive TUI browser (requires: pip install cache-crow[tui])
+  cache-crow --tui
+
+  # extract only files larger than 50 KB
+  cache-crow --output-dir ./recovered --min-size 51200
+
+supported apps:
+  discord, discord-canary, discord-ptb, slack
+
+cache locations (auto-detected per OS):
+  Linux:   ~/.config/discord/Cache/Cache_Data/
+  macOS:   ~/Library/Application Support/discord/Cache/Cache_Data/
+  Windows: %APPDATA%\\discord\\Cache\\Cache_Data\\
+"""
 
 
 def resolve_cache_dirs(app: str, cache_dir: str | None) -> list[Path]:
@@ -21,6 +64,9 @@ def resolve_cache_dirs(app: str, cache_dir: str | None) -> list[Path]:
     dirs = find_cache_dirs(app)
     if not dirs:
         console.print(f"[yellow]No cache directories found for app:[/yellow] {app}")
+        console.print(
+            f"[dim]Tip: use --cache-dir /path/to/Cache_Data to specify a directory manually[/dim]"
+        )
         sys.exit(1)
     return dirs
 
@@ -36,50 +82,81 @@ def fmt_size(size: int) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="cache-crow",
-        description="Scan and extract media from Electron app caches.",
+        description=(
+            "Scan and extract media from Electron app caches.\n"
+            "Identifies files by magic bytes — no guessing, no extensions needed."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_EPILOG,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
         "--app",
         default="discord",
         choices=["discord", "slack"],
-        help="Target app (default: discord)",
+        metavar="APP",
+        help="Target app: discord (default) or slack",
     )
     parser.add_argument(
         "--cache-dir",
         default=None,
         metavar="PATH",
-        help="Override cache directory path directly",
+        help="Override the cache directory (skips auto-detection)",
     )
     parser.add_argument(
         "--output-dir",
         default=None,
         metavar="PATH",
-        help="Extract found media files to PATH",
+        help="Extract found media files into PATH with correct extensions",
+    )
+    parser.add_argument(
+        "--min-size",
+        type=int,
+        default=1024,
+        metavar="BYTES",
+        help="Minimum file size to extract, in bytes (default: 1024)",
     )
     parser.add_argument(
         "--stats",
         action="store_true",
-        help="Print summary stats only (no file table)",
+        help="Print summary stats only (file counts and sizes, no listing)",
+    )
+    parser.add_argument(
+        "--format",
+        choices=["table", "json"],
+        default="table",
+        metavar="FORMAT",
+        help="Output format: table (default) or json (pipe-friendly)",
     )
     parser.add_argument(
         "--metadata",
         action="store_true",
-        help="Enrich entries with LevelDB/cache header metadata (CDN URLs, guild/channel IDs)",
+        help=(
+            "Enrich entries with CDN URLs and guild/channel IDs from cache "
+            "entry headers (and LevelDB index if available)"
+        ),
     )
     parser.add_argument(
         "--watch",
         action="store_true",
-        help="Watch cache directory for new files in real time (press Ctrl+C to stop)",
+        help="Watch the cache directory for new files in real time (Ctrl+C to stop)",
     )
     parser.add_argument(
         "--watch-all",
         action="store_true",
-        help="In watch mode, show all files (not just media)",
+        help="In watch mode, display all files (not just media)",
     )
     parser.add_argument(
         "--tui",
         action="store_true",
-        help="Launch interactive Textual TUI browser",
+        help=(
+            "Launch interactive TUI browser "
+            "(install textual: pip install 'cache-crow[tui]')"
+        ),
     )
 
     args = parser.parse_args()
@@ -182,27 +259,61 @@ def main() -> None:
     # --- Extract mode ---
     if args.output_dir:
         output_dir = Path(args.output_dir).expanduser()
+        all_stats: dict = {
+            "total_scanned": 0,
+            "extracted": 0,
+            "skipped": 0,
+            "by_type": {},
+        }
         for cache_dir in dirs:
             console.print(f"\n[bold cyan]Extracting from:[/bold cyan] {cache_dir}")
-            stats = extract_media(cache_dir, output_dir)
+            stats = extract_media(cache_dir, output_dir, min_size=args.min_size)
+            all_stats["total_scanned"] += stats["total_scanned"]
+            all_stats["extracted"] += stats["extracted"]
+            all_stats["skipped"] += stats["skipped"]
+            for mime, count in stats["by_type"].items():
+                all_stats["by_type"][mime] = all_stats["by_type"].get(mime, 0) + count
 
-            result_table = Table(title="Extraction Results", show_lines=True)
-            result_table.add_column("Metric", style="cyan")
-            result_table.add_column("Value", justify="right")
-            result_table.add_row("Total scanned", str(stats["total_scanned"]))
-            result_table.add_row("Extracted", str(stats["extracted"]))
-            result_table.add_row("Skipped", str(stats["skipped"]))
-            console.print(result_table)
+        if args.format == "json":
+            print(json.dumps(all_stats, indent=2))
+            return
 
-            if stats["by_type"]:
-                type_table = Table(title="By Type", show_lines=True)
-                type_table.add_column("MIME Type", style="cyan")
-                type_table.add_column("Count", justify="right")
-                for mime, count in sorted(stats["by_type"].items(), key=lambda x: -x[1]):
-                    type_table.add_row(mime, str(count))
-                console.print(type_table)
+        result_table = Table(title="Extraction Results", show_lines=True)
+        result_table.add_column("Metric", style="cyan")
+        result_table.add_column("Value", justify="right")
+        result_table.add_row("Total scanned", str(all_stats["total_scanned"]))
+        result_table.add_row("Extracted", str(all_stats["extracted"]))
+        result_table.add_row("Skipped", str(all_stats["skipped"]))
+        console.print(result_table)
+
+        if all_stats["by_type"]:
+            type_table = Table(title="By Type", show_lines=True)
+            type_table.add_column("MIME Type", style="cyan")
+            type_table.add_column("Count", justify="right")
+            for mime, count in sorted(all_stats["by_type"].items(), key=lambda x: -x[1]):
+                type_table.add_row(mime, str(count))
+            console.print(type_table)
 
         console.print(f"\n[bold]Output:[/bold] {output_dir}")
+        return
+
+    # --- JSON output mode ---
+    if args.format == "json":
+        records = []
+        for e in sorted(media_entries, key=lambda x: x.size, reverse=True):
+            rec: dict = {
+                "filename": e.path.name,
+                "path": str(e.path),
+                "mime_type": e.mime_type,
+                "size": e.size,
+                "modified": e.modified,
+            }
+            if e.metadata:
+                rec["url"] = e.metadata.url
+                rec["guild_id"] = e.metadata.guild_id
+                rec["channel_id"] = e.metadata.channel_id
+                rec["cdn_filename"] = e.metadata.cdn_filename
+            print(json.dumps(rec))
         return
 
     # --- Default: print table of found media ---

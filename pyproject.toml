@@ -5,25 +5,32 @@ build-backend = "hatchling.build"
 [project]
 name = "cache-crow"
 version = "0.1.0"
-description = "Scan and extract media from Electron app caches (Discord, etc.)"
+description = "Scan and extract media from Electron app caches (Discord, Slack, and more)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
-keywords = ["discord", "cache", "forensics", "cli", "electron", "media", "recovery"]
+authors = [
+    {name = "Crowligarchy", email = "crowligarchy_raven@proton.me"},
+]
+keywords = ["discord", "cache", "forensics", "cli", "electron", "media", "recovery", "dfir", "privacy", "slack"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
     "Topic :: System :: Filesystems",
     "Topic :: Utilities",
+    "Topic :: Scientific/Engineering :: Information Analysis",
 ]
 dependencies = [
     "rich>=13.0",
@@ -33,7 +40,8 @@ dependencies = [
 [project.optional-dependencies]
 leveldb = ["plyvel>=1.5"]
 tui = ["textual>=1.0"]
-dev = ["pytest", "ruff", "build", "twine"]
+dev = ["pytest", "pytest-cov", "ruff", "build", "twine", "requests"]
+all = ["plyvel>=1.5", "textual>=1.0"]
 
 [project.urls]
 Homepage = "https://github.com/Crowligarchy/cache-crow"
