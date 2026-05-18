@@ -21,7 +21,7 @@ from .config import (
     set_setting,
 )
 from .cleaner import clear_cache, select_for_clearing
-from .extractor import extract_media, MEDIA_TYPES
+from .extractor import extract_media, MEDIA_TYPES, TYPE_CATEGORIES
 from .models import relative_time
 from .scanner import ALL_APPS, find_cache_dirs, scan_all_apps, scan_cache, MIME_EXTENSIONS
 
@@ -369,6 +369,17 @@ def main() -> None:
         default=cfg.min_size,
         metavar="BYTES",
         help="Minimum file size to extract, in bytes (default: 1024)",
+    )
+    parser.add_argument(
+        "--type",
+        default="all",
+        choices=["image", "video", "audio", "sticker", "all"],
+        metavar="TYPE",
+        dest="type_filter",
+        help=(
+            "Filter by media category: image, video, audio, sticker, or all (default). "
+            "Applies to both listing and extraction."
+        ),
     )
     parser.add_argument(
         "--stats",
@@ -789,7 +800,9 @@ def main() -> None:
                 "(LevelDB index may be absent or cache files have no headers)"
             )
 
-    media_entries = [e for e in all_entries if e.mime_type in MEDIA_TYPES]
+    _type_filter = getattr(args, "type_filter", "all")
+    _allowed_types = TYPE_CATEGORIES.get(_type_filter, MEDIA_TYPES)
+    media_entries = [e for e in all_entries if e.mime_type in _allowed_types]
 
     # --- Save to dump dir ---
     if args.save:
@@ -858,10 +871,22 @@ def main() -> None:
     # --- Stats mode ---
     if args.stats:
         by_type: dict[str, int] = {}
+        by_category: dict[str, dict] = {}
         total_size = 0
         for e in media_entries:
             by_type[e.mime_type] = by_type.get(e.mime_type, 0) + 1
             total_size += e.size
+            # Determine category
+            cat = "other"
+            for _cat, _mimes in TYPE_CATEGORIES.items():
+                if _cat == "all":
+                    continue
+                if e.mime_type in _mimes:
+                    cat = _cat
+                    break
+            cs = by_category.setdefault(cat, {"count": 0, "bytes": 0})
+            cs["count"] += 1
+            cs["bytes"] += e.size
 
         stats_table = Table(title="Cache Stats", show_lines=True)
         stats_table.add_column("Metric", style="cyan")
@@ -871,8 +896,20 @@ def main() -> None:
         stats_table.add_row("Total media size", fmt_size(total_size))
         console.print(stats_table)
 
+        if by_category:
+            cat_table = Table(title="Breakdown by Category", show_lines=True)
+            cat_table.add_column("Category", style="cyan")
+            cat_table.add_column("Count", justify="right")
+            cat_table.add_column("Size", justify="right")
+            _cat_order = ["image", "video", "audio", "sticker", "other"]
+            for cat in _cat_order:
+                if cat in by_category:
+                    cs = by_category[cat]
+                    cat_table.add_row(cat, str(cs["count"]), fmt_size(cs["bytes"]))
+            console.print(cat_table)
+
         if by_type:
-            type_table = Table(title="Breakdown by Type", show_lines=True)
+            type_table = Table(title="Breakdown by MIME Type", show_lines=True)
             type_table.add_column("Type", style="cyan")
             type_table.add_column("Count", justify="right")
             for mime, count in sorted(by_type.items(), key=lambda x: -x[1]):
@@ -906,16 +943,28 @@ def main() -> None:
             "extracted": 0,
             "skipped": 0,
             "by_type": {},
+            "by_category": {},
+            "sticker_assets": [],
         }
         with CrowDB(effective_db_path) as _xdb:
             for cache_dir in dirs:
                 stderr_console.print(f"\n[bold cyan]Extracting from:[/bold cyan] {cache_dir}")
-                stats = extract_media(cache_dir, output_dir, min_size=args.min_size)
+                stats = extract_media(
+                    cache_dir,
+                    output_dir,
+                    min_size=args.min_size,
+                    type_filter=getattr(args, "type_filter", "all"),
+                )
                 all_stats["total_scanned"] += stats["total_scanned"]
                 all_stats["extracted"] += stats["extracted"]
                 all_stats["skipped"] += stats["skipped"]
                 for mime, count in stats["by_type"].items():
                     all_stats["by_type"][mime] = all_stats["by_type"].get(mime, 0) + count
+                for cat, cs in stats.get("by_category", {}).items():
+                    existing = all_stats["by_category"].setdefault(cat, {"count": 0, "bytes": 0})
+                    existing["count"] += cs["count"]
+                    existing["bytes"] += cs["bytes"]
+                all_stats["sticker_assets"].extend(stats.get("sticker_assets", []))
 
                 # Record extractions in DB
                 for _xentry in scan_cache(cache_dir):
@@ -953,13 +1002,38 @@ def main() -> None:
         result_table.add_row("Skipped", str(all_stats["skipped"]))
         console.print(result_table)
 
+        if all_stats["by_category"]:
+            cat_table = Table(title="By Category", show_lines=True)
+            cat_table.add_column("Category", style="cyan")
+            cat_table.add_column("Count", justify="right")
+            cat_table.add_column("Size", justify="right")
+            _cat_order = ["image", "video", "audio", "sticker", "other"]
+            for _cat in _cat_order:
+                if _cat in all_stats["by_category"]:
+                    _cs = all_stats["by_category"][_cat]
+                    cat_table.add_row(_cat, str(_cs["count"]), fmt_size(_cs["bytes"]))
+            console.print(cat_table)
+
         if all_stats["by_type"]:
-            type_table = Table(title="By Type", show_lines=True)
+            type_table = Table(title="By MIME Type", show_lines=True)
             type_table.add_column("MIME Type", style="cyan")
             type_table.add_column("Count", justify="right")
             for mime, count in sorted(all_stats["by_type"].items(), key=lambda x: -x[1]):
                 type_table.add_row(mime, str(count))
             console.print(type_table)
+
+        if all_stats.get("sticker_assets"):
+            sticker_table = Table(title="Sticker Assets Found", show_lines=True)
+            sticker_table.add_column("Cache File", style="cyan")
+            sticker_table.add_column("Name")
+            sticker_table.add_column("Asset URL", style="green")
+            for _sa in all_stats["sticker_assets"]:
+                sticker_table.add_row(
+                    _sa.get("cache_file", "-"),
+                    _sa.get("name", "-"),
+                    (_sa.get("asset_url") or "")[:70],
+                )
+            console.print(sticker_table)
 
         console.print(f"\n[bold]Output:[/bold] {output_dir}")
         return

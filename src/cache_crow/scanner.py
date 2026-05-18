@@ -197,6 +197,11 @@ MIME_EXTENSIONS: dict[str, str] = {
     "image/webp": ".webp",
     "video/mp4": ".mp4",
     "video/webm": ".webm",
+    "audio/mp3": ".mp3",
+    "audio/mpeg": ".mp3",
+    "audio/ogg": ".ogg",
+    "audio/flac": ".flac",
+    "application/json": ".json",
     "application/octet-stream": ".bin",
 }
 
@@ -235,6 +240,24 @@ def _classify_bytes(data: bytes) -> str:
         return "video/mp4"
     if data[:4] == b"\x1A\x45\xDF\xA3":
         return "video/webm"
+    # MP3: ID3 tag header or raw MP3 sync bytes
+    if data[:3] == b"ID3":
+        return "audio/mpeg"
+    if data[:2] in (b"\xFF\xFB", b"\xFF\xF3", b"\xFF\xF2"):
+        return "audio/mpeg"
+    # OGG container (covers Opus voice messages and Vorbis audio)
+    if data[:4] == b"OggS":
+        return "audio/ogg"
+    # FLAC
+    if data[:4] == b"fLaC":
+        return "audio/flac"
+    # JSON (sticker metadata and other Discord JSON payloads)
+    # Look for a leading '{' or '[' possibly preceded by a UTF-8 BOM
+    stripped = data.lstrip(b"\xef\xbb\xbf \t\r\n")
+    if stripped and stripped[0:1] in (b"{", b"["):
+        # Confirm it looks like text (no null bytes in first 64 chars)
+        if b"\x00" not in data[:64]:
+            return "application/json"
     return "application/octet-stream"
 
 
