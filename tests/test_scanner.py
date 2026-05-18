@@ -341,3 +341,95 @@ def test_discord_windows_cache_path():
         paths = sc._get_cache_paths()
     discord_paths = [str(p) for p in paths.get("discord", [])]
     assert any("discord" in p.lower() for p in discord_paths)
+
+
+# ---------------------------------------------------------------------------
+# Task A — Flatpak/Snap Discord cache path detection
+# ---------------------------------------------------------------------------
+
+def test_discord_flatpak_path_in_linux_cache_paths():
+    """Linux discord paths include the Flatpak variant under ~/.var/app."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    discord_paths = [str(p) for p in paths.get("discord", [])]
+    assert any(
+        ".var/app/com.discordapp.Discord" in p for p in discord_paths
+    ), "Flatpak Discord path not found"
+
+
+def test_discord_snap_path_in_linux_cache_paths():
+    """Linux discord paths include the Snap variant under ~/snap."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    discord_paths = [str(p) for p in paths.get("discord", [])]
+    assert any(
+        "snap/discord" in p for p in discord_paths
+    ), "Snap Discord path not found"
+
+
+def test_discord_ptb_flatpak_path_in_linux_cache_paths():
+    """Linux discord-ptb paths include the Flatpak variant."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    ptb_paths = [str(p) for p in paths.get("discord-ptb", [])]
+    assert any(
+        ".var/app/com.discordapp.DiscordPTB" in p for p in ptb_paths
+    ), "Flatpak Discord PTB path not found"
+
+
+def test_discord_canary_flatpak_path_in_linux_cache_paths():
+    """Linux discord-canary paths include the Flatpak variant."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    canary_paths = [str(p) for p in paths.get("discord-canary", [])]
+    assert any(
+        ".var/app/com.discordapp.DiscordCanary" in p for p in canary_paths
+    ), "Flatpak Discord Canary path not found"
+
+
+def test_find_cache_dirs_uses_flatpak_path_when_exists(tmp_path):
+    """find_cache_dirs returns a Flatpak path when it exists and native does not."""
+    flatpak_dir = tmp_path / ".var" / "app" / "com.discordapp.Discord" / "config" / "discord" / "Cache" / "Cache_Data"
+    flatpak_dir.mkdir(parents=True)
+    native_path = tmp_path / ".config" / "discord" / "Cache" / "Cache_Data"  # does not exist
+
+    fake_paths = {"discord": [native_path, flatpak_dir]}
+    with patch("cache_crow.scanner.CACHE_PATHS", fake_paths):
+        result = find_cache_dirs("discord")
+
+    assert flatpak_dir in result
+    assert native_path not in result
+
+
+def test_find_cache_dirs_returns_all_existing_paths(tmp_path):
+    """find_cache_dirs returns every existing path, not just the first one."""
+    native_dir = tmp_path / "native"
+    flatpak_dir = tmp_path / "flatpak"
+    native_dir.mkdir()
+    flatpak_dir.mkdir()
+
+    fake_paths = {"discord": [native_dir, flatpak_dir]}
+    with patch("cache_crow.scanner.CACHE_PATHS", fake_paths):
+        result = find_cache_dirs("discord")
+
+    assert native_dir in result
+    assert flatpak_dir in result
+    assert len(result) == 2
+
+
+def test_find_cache_dirs_snap_path_when_exists(tmp_path):
+    """find_cache_dirs returns a Snap path when it exists and others do not."""
+    snap_dir = tmp_path / "snap" / "discord" / "current" / ".config" / "discord" / "Cache" / "Cache_Data"
+    snap_dir.mkdir(parents=True)
+    native_path = tmp_path / ".config" / "discord" / "Cache" / "Cache_Data"
+
+    fake_paths = {"discord": [native_path, snap_dir]}
+    with patch("cache_crow.scanner.CACHE_PATHS", fake_paths):
+        result = find_cache_dirs("discord")
+
+    assert snap_dir in result
+    assert native_path not in result

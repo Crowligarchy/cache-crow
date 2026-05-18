@@ -40,17 +40,16 @@ account already has permission to read.
 
 ## Install
 
-> **PyPI status**: The package is not yet published to PyPI. Use the git install
-> method below until the first release is cut and the PyPI listing goes live.
-
 ```bash
-# From source — works today, gets the latest code
+# Recommended — installs into an isolated environment, no PATH fiddling needed
+pipx install cache-crow
+
+# Or with plain pip
+pip install cache-crow
+
+# From source (latest unreleased code)
 pipx install git+https://github.com/Crowligarchy/cache-crow
 pip install git+https://github.com/Crowligarchy/cache-crow
-
-# Once published to PyPI (coming with v0.1.0 release):
-pipx install cache-crow
-pip install cache-crow
 ```
 
 > **PATH note for pip users**: pip installs scripts to `~/.local/bin` on Linux/macOS.
@@ -65,13 +64,13 @@ pip install cache-crow
 
 ```bash
 # Interactive TUI browser (powered by Textual)
-pip install 'git+https://github.com/Crowligarchy/cache-crow#egg=cache-crow[tui]'
+pip install 'cache-crow[tui]'
 
 # LevelDB index reader — recover CDN URLs from the cache index
-pip install 'git+https://github.com/Crowligarchy/cache-crow#egg=cache-crow[leveldb]'
+pip install 'cache-crow[leveldb]'
 
 # Everything
-pip install 'git+https://github.com/Crowligarchy/cache-crow#egg=cache-crow[all]'
+pip install 'cache-crow[all]'
 ```
 
 ### Verify installation

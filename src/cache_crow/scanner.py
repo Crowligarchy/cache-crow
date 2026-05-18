@@ -145,15 +145,20 @@ def _get_cache_paths() -> dict[str, list[Path]]:
 
     # Linux (default)
     config = Path.home() / ".config"
+    home = Path.home()
     return {
         "discord": [
             config / "discord" / "Cache" / "Cache_Data",
+            home / ".var" / "app" / "com.discordapp.Discord" / "config" / "discord" / "Cache" / "Cache_Data",
+            home / "snap" / "discord" / "current" / ".config" / "discord" / "Cache" / "Cache_Data",
         ],
         "discord-canary": [
             config / "discordcanary" / "Cache" / "Cache_Data",
+            home / ".var" / "app" / "com.discordapp.DiscordCanary" / "config" / "discordcanary" / "Cache" / "Cache_Data",
         ],
         "discord-ptb": [
             config / "discordptb" / "Cache" / "Cache_Data",
+            home / ".var" / "app" / "com.discordapp.DiscordPTB" / "config" / "discordptb" / "Cache" / "Cache_Data",
         ],
         "slack": [
             config / "Slack" / "Cache" / "Cache_Data",
