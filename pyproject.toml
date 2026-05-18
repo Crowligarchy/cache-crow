@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "Crowligarchy", email = "crowligarchy_raven@proton.me"},
+    {name = "crowligarchy-raven", email = "crowligarchy_raven@proton.me"},
 ]
 keywords = ["discord", "cache", "media-recovery", "forensics", "electron", "privacy", "cli", "chrome", "slack", "dfir"]
 classifiers = [
@@ -48,6 +48,7 @@ all = ["plyvel>=1.5", "textual>=1.0"]
 Homepage = "https://github.com/Crowligarchy/cache-crow"
 Repository = "https://github.com/Crowligarchy/cache-crow"
 Issues = "https://github.com/Crowligarchy/cache-crow/issues"
+Changelog = "https://github.com/Crowligarchy/cache-crow/releases"
 
 [project.scripts]
 cache-crow = "cache_crow.cli:main"
