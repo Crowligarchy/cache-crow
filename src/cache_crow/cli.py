@@ -692,6 +692,67 @@ def main() -> None:
     if until_ts is not None:
         all_entries = [e for e in all_entries if e.modified <= until_ts]
 
+    # --- Clear mode ---
+    if args.clear:
+        if args.all_apps:
+            console.print(
+                "[red]Error:[/red] --clear cannot be used with --all-apps (too dangerous). "
+                "Specify --app or --cache-dir explicitly."
+            )
+            sys.exit(1)
+
+        # Build selection
+        to_remove = select_for_clearing(
+            all_entries,
+            older_than_days=args.clear_older_than,
+            smaller_than_bytes=args.clear_smaller_than,
+            larger_than_bytes=args.clear_larger_than,
+            mime_types=args.clear_types,
+        )
+
+        # Determine effective dry-run: dry-run unless --yes is explicitly given
+        effective_dry_run = not args.yes
+
+        # Show what will be / was removed
+        clear_title = "Files to remove (dry run)" if effective_dry_run else "Removing files"
+        clear_table = Table(title=clear_title, show_lines=True)
+        clear_table.add_column("Filename", style="cyan", no_wrap=True)
+        clear_table.add_column("Type")
+        clear_table.add_column("Size", justify="right")
+        clear_table.add_column("Modified", justify="right", style="dim")
+
+        for e in sorted(to_remove, key=lambda x: x.modified):
+            clear_table.add_row(
+                e.path.name,
+                e.mime_type,
+                fmt_size(e.size),
+                fmt_timestamp(e.modified),
+            )
+
+        console.print(clear_table)
+
+        result = clear_cache(dirs[0] if dirs else Path("."), to_remove, dry_run=effective_dry_run)
+        freed_mb = result["freed_bytes"] / 1024 / 1024
+
+        if effective_dry_run:
+            would_count = len(to_remove)
+            console.print(
+                f"[bold yellow]Would remove {would_count} file{'s' if would_count != 1 else ''}, "
+                f"freeing {freed_mb:.2f} MB[/bold yellow]"
+            )
+            console.print("[dim]Run with --yes to actually delete.[/dim]")
+        else:
+            removed = result["removed"]
+            console.print(
+                f"[bold green]Removed {removed} file{'s' if removed != 1 else ''}, "
+                f"freed {freed_mb:.2f} MB[/bold green]"
+            )
+            if result["errors"]:
+                for err in result["errors"]:
+                    console.print(f"  [red]Error:[/red] {err}")
+
+        return
+
     # --- Record all seen files in the DB (cumulative stats) ---
     from .db import CrowDB
 
