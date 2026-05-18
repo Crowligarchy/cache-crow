@@ -122,3 +122,222 @@ def test_find_cache_dirs_none_exist(tmp_path):
         result = find_cache_dirs("discord")
 
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# Task 1 — Enhanced file metadata: mtime, ctime, relative_time
+# ---------------------------------------------------------------------------
+
+def test_scan_cache_entry_has_mtime_and_ctime(tmp_path):
+    """CacheEntry.mtime and .ctime are populated as floats from os.stat."""
+    p = write_file(tmp_path, "testfile", PNG_MAGIC)
+    entries = scan_cache(tmp_path)
+    assert len(entries) == 1
+    e = entries[0]
+    assert isinstance(e.mtime, float)
+    assert isinstance(e.ctime, float)
+    assert e.mtime > 0
+    assert e.ctime > 0
+    # mtime should match os.stat().st_mtime
+    assert e.mtime == pytest.approx(p.stat().st_mtime)
+    assert e.ctime == pytest.approx(p.stat().st_ctime)
+
+
+def test_relative_time_just_now():
+    """relative_time returns 'just now' for timestamps within the last minute."""
+    import time as _t
+    from cache_crow.models import relative_time
+    ts = _t.time()
+    assert relative_time(ts) == "just now"
+    assert relative_time(ts - 30) == "just now"
+    assert relative_time(ts - 59) == "just now"
+
+
+def test_relative_time_minutes():
+    """relative_time returns 'N minute(s) ago' for 1–59 minutes."""
+    import time as _t
+    from cache_crow.models import relative_time
+    ts = _t.time()
+    assert relative_time(ts - 60) == "1 minute ago"
+    assert relative_time(ts - 300) == "5 minutes ago"
+    assert relative_time(ts - 3540) == "59 minutes ago"
+
+
+def test_relative_time_hours():
+    """relative_time returns 'N hour(s) ago' for 1–23 hours."""
+    import time as _t
+    from cache_crow.models import relative_time
+    ts = _t.time()
+    assert relative_time(ts - 3600) == "1 hour ago"
+    assert relative_time(ts - 7200) == "2 hours ago"
+    assert relative_time(ts - 82800) == "23 hours ago"
+
+
+def test_relative_time_days():
+    """relative_time returns 'N day(s) ago' for 1–6 days."""
+    import time as _t
+    from cache_crow.models import relative_time
+    ts = _t.time()
+    assert relative_time(ts - 86400) == "1 day ago"
+    assert relative_time(ts - 3 * 86400) == "3 days ago"
+    assert relative_time(ts - 6 * 86400) == "6 days ago"
+
+
+def test_relative_time_weeks():
+    """relative_time returns 'N week(s) ago' for 1–4 weeks."""
+    import time as _t
+    from cache_crow.models import relative_time
+    ts = _t.time()
+    assert relative_time(ts - 7 * 86400) == "1 week ago"
+    assert relative_time(ts - 14 * 86400) == "2 weeks ago"
+
+
+def test_relative_time_months():
+    """relative_time returns 'N month(s) ago' for 1–11 months."""
+    import time as _t
+    from cache_crow.models import relative_time
+    ts = _t.time()
+    assert relative_time(ts - 65 * 86400) == "2 months ago"
+
+
+def test_relative_time_years():
+    """relative_time returns 'N year(s) ago' for >= 1 year."""
+    import time as _t
+    from cache_crow.models import relative_time
+    ts = _t.time()
+    assert relative_time(ts - 400 * 86400) == "1 year ago"
+    assert relative_time(ts - 800 * 86400) == "2 years ago"
+
+
+# ---------------------------------------------------------------------------
+# Task 2 — Multi-app support: new app names in CACHE_PATHS
+# ---------------------------------------------------------------------------
+
+def test_all_apps_present_in_cache_paths():
+    """All required apps are registered in CACHE_PATHS."""
+    from cache_crow.scanner import CACHE_PATHS
+    required = {
+        "discord", "discord-canary", "discord-ptb",
+        "chrome", "chromium", "brave", "edge", "slack",
+    }
+    assert required.issubset(set(CACHE_PATHS.keys())), (
+        f"Missing apps: {required - set(CACHE_PATHS.keys())}"
+    )
+
+
+def test_find_cache_dirs_all_mode(tmp_path):
+    """find_cache_dirs('all') returns directories from every app."""
+    discord_dir = tmp_path / "discord_cache"
+    chrome_dir = tmp_path / "chrome_cache"
+    discord_dir.mkdir()
+    chrome_dir.mkdir()
+
+    fake_paths = {
+        "discord": [discord_dir],
+        "discord-canary": [tmp_path / "nonexistent"],
+        "chrome": [chrome_dir],
+    }
+
+    with patch("cache_crow.scanner.CACHE_PATHS", fake_paths):
+        result = find_cache_dirs("all")
+
+    assert discord_dir in result
+    assert chrome_dir in result
+    assert len(result) == 2  # nonexistent excluded
+
+
+def test_find_cache_dirs_all_deduplicates(tmp_path):
+    """find_cache_dirs('all') deduplicates shared paths across apps."""
+    shared_dir = tmp_path / "shared_cache"
+    shared_dir.mkdir()
+
+    fake_paths = {
+        "discord": [shared_dir],
+        "chrome": [shared_dir],  # same path
+    }
+
+    with patch("cache_crow.scanner.CACHE_PATHS", fake_paths):
+        result = find_cache_dirs("all")
+
+    assert result.count(shared_dir) == 1
+
+
+def test_discord_linux_cache_path():
+    """Discord cache path on Linux points to ~/.config/discord/Cache/Cache_Data."""
+    home = Path.home()
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        import importlib
+        paths = sc._get_cache_paths()
+    assert any(
+        "discord" in str(p) and "Cache_Data" in str(p)
+        for p in paths.get("discord", [])
+    )
+
+
+def test_discord_canary_linux_cache_path():
+    """Discord Canary cache path on Linux points to discordcanary."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    assert any(
+        "discordcanary" in str(p)
+        for p in paths.get("discord-canary", [])
+    )
+
+
+def test_discord_ptb_linux_cache_path():
+    """Discord PTB cache path on Linux points to discordptb."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    assert any(
+        "discordptb" in str(p)
+        for p in paths.get("discord-ptb", [])
+    )
+
+
+def test_chrome_linux_cache_path():
+    """Chrome cache path on Linux points to google-chrome."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    assert any(
+        "google-chrome" in str(p)
+        for p in paths.get("chrome", [])
+    )
+
+
+def test_brave_linux_cache_path():
+    """Brave cache path on Linux points to BraveSoftware."""
+    with patch("platform.system", return_value="Linux"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    assert any(
+        "BraveSoftware" in str(p)
+        for p in paths.get("brave", [])
+    )
+
+
+def test_discord_macos_cache_path():
+    """Discord cache path on macOS points to Application Support/discord."""
+    with patch("platform.system", return_value="Darwin"):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    assert any(
+        "discord" in str(p) and "Application Support" in str(p)
+        for p in paths.get("discord", [])
+    )
+
+
+def test_discord_windows_cache_path():
+    """Discord cache path on Windows uses APPDATA or LOCALAPPDATA."""
+    import os
+    fake_env = {"APPDATA": "C:\\Users\\test\\AppData\\Roaming",
+                "LOCALAPPDATA": "C:\\Users\\test\\AppData\\Local"}
+    with patch("platform.system", return_value="Windows"), \
+         patch.dict("os.environ", fake_env, clear=False):
+        from cache_crow import scanner as sc
+        paths = sc._get_cache_paths()
+    discord_paths = [str(p) for p in paths.get("discord", [])]
+    assert any("discord" in p.lower() for p in discord_paths)

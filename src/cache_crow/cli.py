@@ -20,6 +20,7 @@ from .config import (
     load_config,
     set_setting,
 )
+from .cleaner import clear_cache, select_for_clearing
 from .extractor import extract_media, MEDIA_TYPES
 from .models import relative_time
 from .scanner import ALL_APPS, find_cache_dirs, scan_all_apps, scan_cache, MIME_EXTENSIONS
@@ -497,6 +498,59 @@ def main() -> None:
         help="SQLite DB path (overrides config db_path)",
     )
 
+    # --- Clear mode flags ---
+    parser.add_argument(
+        "--clear",
+        action="store_true",
+        help=(
+            "Enable cache-clearing mode. Implies --dry-run unless --yes is also "
+            "passed. Requires --app or --cache-dir; refuses to run with --all-apps."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be deleted without actually deleting (default when --clear is used alone)",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip the confirmation prompt and actually delete files when used with --clear",
+    )
+    parser.add_argument(
+        "--clear-older-than",
+        type=int,
+        default=None,
+        metavar="DAYS",
+        help="With --clear: only remove entries older than N days",
+    )
+    parser.add_argument(
+        "--clear-smaller-than",
+        type=int,
+        default=None,
+        metavar="BYTES",
+        help="With --clear: only remove entries smaller than N bytes",
+    )
+    parser.add_argument(
+        "--clear-larger-than",
+        type=int,
+        default=None,
+        metavar="BYTES",
+        help="With --clear: only remove entries larger than N bytes",
+    )
+    parser.add_argument(
+        "--clear-type",
+        action="append",
+        dest="clear_types",
+        default=None,
+        metavar="MIME",
+        help=(
+            "With --clear: only remove entries whose MIME type contains MIME "
+            "(partial match — 'video' matches video/mp4, video/webm, etc.). "
+            "Can be specified multiple times."
+        ),
+    )
+
     # --- Subcommands ---
     subparsers = parser.add_subparsers(dest="subcommand")
 
@@ -834,8 +888,17 @@ def main() -> None:
 
     # --- JSON output mode ---
     if args.format == "json":
+        _json_sort = getattr(args, "sort", "size")
         if args.timeline:
+            # --timeline preserves original behaviour: oldest-first chronological
             json_entries = sorted(media_entries, key=lambda x: x.modified)
+        elif _json_sort == "date":
+            # --sort date: newest-first
+            json_entries = sorted(media_entries, key=lambda x: x.mtime, reverse=True)
+        elif _json_sort == "type":
+            json_entries = sorted(media_entries, key=lambda x: x.mime_type)
+        elif _json_sort == "name":
+            json_entries = sorted(media_entries, key=lambda x: x.path.name)
         else:
             json_entries = sorted(media_entries, key=lambda x: x.size, reverse=True)
         for e in json_entries:
@@ -880,11 +943,13 @@ def main() -> None:
         table.add_column("Guild ID")
         table.add_column("Channel ID")
 
-    # Sort logic: --sort takes precedence; --timeline is a shortcut for date
+    # Sort logic: --sort takes precedence; --timeline preserves oldest-first behaviour
     _sort = getattr(args, "sort", "size")
     if args.timeline and _sort == "size":
-        _sort = "date"
-    if _sort == "date":
+        # --timeline without explicit --sort means oldest-first chronological
+        sorted_entries = sorted(media_entries, key=lambda x: x.modified)
+    elif _sort == "date":
+        # --sort date: newest-first
         sorted_entries = sorted(media_entries, key=lambda x: x.mtime, reverse=True)
     elif _sort == "type":
         sorted_entries = sorted(media_entries, key=lambda x: x.mime_type)

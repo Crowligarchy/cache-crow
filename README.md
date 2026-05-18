@@ -4,6 +4,8 @@
 > no expiry, and no automatic cleanup when messages are deleted. cache-crow reads
 > those binary blobs, identifies them by magic bytes, and gives them back to you.
 
+[![PyPI version](https://badge.fury.io/py/cache-crow.svg)](https://pypi.org/project/cache-crow/)
+[![Downloads](https://pepy.tech/badge/cache-crow)](https://pepy.tech/project/cache-crow)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/Crowligarchy/cache-crow/tests.yml?label=tests)](https://github.com/Crowligarchy/cache-crow/actions)
@@ -40,13 +42,13 @@ account already has permission to read.
 
 ```bash
 # Recommended — installs the `cache-crow` command globally, isolated from your system Python
-pipx install git+https://github.com/Crowligarchy/cache-crow
+pipx install cache-crow
 
 # With plain pip (ensure ~/.local/bin is in your PATH — see note below)
-pip install --user git+https://github.com/Crowligarchy/cache-crow
+pip install cache-crow
 
-# PyPI (coming soon — use the git URL above for now)
-# pip install cache-crow
+# From source (latest unreleased changes)
+pipx install git+https://github.com/Crowligarchy/cache-crow
 ```
 
 > **PATH note for pip users**: pip installs scripts to `~/.local/bin` on Linux/macOS.
