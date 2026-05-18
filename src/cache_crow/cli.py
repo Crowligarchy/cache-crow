@@ -26,6 +26,7 @@ from .models import relative_time
 from .scanner import ALL_APPS, find_cache_dirs, scan_all_apps, scan_cache, MIME_EXTENSIONS
 
 console = Console()
+stderr_console = Console(stderr=True)
 
 _EPILOG = """
 examples:
@@ -44,8 +45,8 @@ examples:
   # point at an arbitrary cache directory (forensics, other users' profiles)
   cache-crow --cache-dir /path/to/Cache_Data
 
-  # machine-readable JSON output (pipe-friendly)
-  cache-crow --format json | jq '.[] | select(.mime_type == "video/mp4")'
+  # machine-readable JSON output (pipe-friendly, one JSON object per line)
+  cache-crow --format json | jq 'select(.mime_type == "video/mp4")'
 
   # enrich results with CDN URLs from cache entry headers
   cache-crow --metadata
@@ -905,7 +906,7 @@ def main() -> None:
         }
         with CrowDB(effective_db_path) as _xdb:
             for cache_dir in dirs:
-                console.print(f"\n[bold cyan]Extracting from:[/bold cyan] {cache_dir}")
+                stderr_console.print(f"\n[bold cyan]Extracting from:[/bold cyan] {cache_dir}")
                 stats = extract_media(cache_dir, output_dir, min_size=args.min_size)
                 all_stats["total_scanned"] += stats["total_scanned"]
                 all_stats["extracted"] += stats["extracted"]
