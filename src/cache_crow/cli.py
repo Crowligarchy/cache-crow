@@ -21,6 +21,7 @@ from .config import (
     set_setting,
 )
 from .extractor import extract_media, MEDIA_TYPES
+from .models import relative_time
 from .scanner import ALL_APPS, find_cache_dirs, scan_all_apps, scan_cache, MIME_EXTENSIONS
 
 console = Console()
@@ -247,6 +248,70 @@ def cmd_dump(dump_dir: Path) -> None:
     console.print(f"[bold]{len(files)} files[/bold] — total {fmt_size(total_size)}")
 
 
+
+def _purge_dir(target_dir, label: str, yes: bool) -> None:
+    """Delete all files in target_dir after an optional confirmation prompt."""
+    from pathlib import Path
+    target_dir = Path(target_dir)
+    if not target_dir.exists() or not target_dir.is_dir():
+        console.print(f"[yellow]Directory not found, skipping:[/yellow] {target_dir}")
+        return
+    files = [f for f in target_dir.iterdir() if f.is_file()]
+    total_size = sum(f.stat().st_size for f in files)
+    console.print(
+        f"\n[bold]{label}[/bold] {target_dir}\n"
+        f"  Files : {len(files)}\n"
+        f"  Size  : {fmt_size(total_size)}"
+    )
+    if not files:
+        console.print("  [dim]Nothing to purge.[/dim]")
+        return
+    if not yes:
+        answer = input("  Confirm purge? [y/N] ").strip().lower()
+        if answer not in ("y", "yes"):
+            console.print("  [dim]Skipped.[/dim]")
+            return
+    deleted = 0
+    errors = 0
+    for f in files:
+        try:
+            f.unlink()
+            deleted += 1
+        except OSError as exc:
+            console.print(f"  [red]Error deleting {f.name}:[/red] {exc}")
+            errors += 1
+    console.print(
+        f"  [green]Deleted {deleted} file(s).[/green]"
+        + (f" [red]{errors} error(s).[/red]" if errors else "")
+    )
+
+
+def cmd_purge(args) -> None:
+    """Handle the purge subcommand."""
+    purge_target = args.purge_target
+    yes = args.yes
+    if purge_target in ("cache", "all"):
+        app = getattr(args, "app", "discord")
+        cache_dir_override = getattr(args, "cache_dir", None)
+        if app == "all":
+            dirs = find_cache_dirs("all")
+        else:
+            dirs = resolve_cache_dirs(app, cache_dir_override)
+        for d in dirs:
+            _purge_dir(d, "Cache directory:", yes)
+    if purge_target in ("dump", "all"):
+        dump_dir_arg = getattr(args, "dump_dir", None)
+        if dump_dir_arg:
+            dump_dir = Path(dump_dir_arg).expanduser()
+        else:
+            try:
+                cfg = load_config()
+                dump_dir = cfg.dump_dir or default_dump_dir()
+            except Exception:
+                dump_dir = default_dump_dir()
+        _purge_dir(dump_dir, "Dump directory:", yes)
+
+
 def main() -> None:
     # Load config first so defaults can inform argument defaults
     cfg = load_config()
@@ -346,6 +411,14 @@ def main() -> None:
         action="store_true",
         help="Sort results chronologically (oldest first) and show a 'Modified' timestamp column.",
     )
+
+    parser.add_argument(
+        "--sort",
+        choices=["size", "date", "type", "name"],
+        default="size",
+        metavar="FIELD",
+        help="Sort results by: size (default), date, type, or name",
+    )
     parser.add_argument(
         "--since",
         default=None,
@@ -442,6 +515,42 @@ def main() -> None:
 
     subparsers.add_parser("dump", help="Show dump directory contents and size")
 
+    purge_parser = subparsers.add_parser(
+        "purge",
+        help="Delete files from cache or dump directories",
+        description="Remove files from cache directories or the dump directory.",
+    )
+    purge_parser.add_argument(
+        "purge_target",
+        choices=["cache", "dump", "all"],
+        metavar="TARGET",
+        help="What to purge: cache, dump, or all",
+    )
+    purge_parser.add_argument(
+        "--app",
+        default="discord",
+        choices=ALL_APPS + ["all"],
+        metavar="APP",
+        help="Target app for cache purge (default: discord)",
+    )
+    purge_parser.add_argument(
+        "--cache-dir",
+        default=None,
+        metavar="PATH",
+        help="Override cache directory for purge",
+    )
+    purge_parser.add_argument(
+        "--dump-dir",
+        default=None,
+        metavar="PATH",
+        help="Override dump directory for purge (default: from config)",
+    )
+    purge_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompt",
+    )
+
     args = parser.parse_args()
 
     # --- Resolve effective dump_dir and db_path (CLI > config > default) ---
@@ -471,6 +580,10 @@ def main() -> None:
 
     if args.subcommand == "dump":
         cmd_dump(effective_dump_dir)
+        return
+
+    if args.subcommand == "purge":
+        cmd_purge(args)
         return
 
     # --- Watch mode ---
@@ -733,6 +846,10 @@ def main() -> None:
                 "size": e.size,
                 "modified": e.modified,
                 "modified_fmt": fmt_timestamp(e.modified),
+                "mtime": e.mtime,
+                "mtime_iso": datetime.datetime.fromtimestamp(e.mtime).isoformat() if e.mtime else None,
+                "ctime": e.ctime,
+                "relative_time": relative_time(e.mtime) if e.mtime else None,
             }
             if e.app_source is not None:
                 rec["app_source"] = e.app_source
@@ -754,9 +871,8 @@ def main() -> None:
     table.add_column("Filename", style="cyan", no_wrap=True)
     table.add_column("Type")
     table.add_column("Size", justify="right")
-
-    if args.timeline:
-        table.add_column("Modified", style="dim")
+    table.add_column("Modified", justify="right", style="dim")
+    table.add_column("Age")
     if args.all_apps:
         table.add_column("App", style="magenta")
     if args.metadata:
@@ -764,9 +880,16 @@ def main() -> None:
         table.add_column("Guild ID")
         table.add_column("Channel ID")
 
-    # Sort: timeline = oldest first; default = largest first
-    if args.timeline:
-        sorted_entries = sorted(media_entries, key=lambda x: x.modified)
+    # Sort logic: --sort takes precedence; --timeline is a shortcut for date
+    _sort = getattr(args, "sort", "size")
+    if args.timeline and _sort == "size":
+        _sort = "date"
+    if _sort == "date":
+        sorted_entries = sorted(media_entries, key=lambda x: x.mtime, reverse=True)
+    elif _sort == "type":
+        sorted_entries = sorted(media_entries, key=lambda x: x.mime_type)
+    elif _sort == "name":
+        sorted_entries = sorted(media_entries, key=lambda x: x.path.name)
     else:
         sorted_entries = sorted(media_entries, key=lambda x: x.size, reverse=True)
 
