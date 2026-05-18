@@ -63,15 +63,41 @@ def _get_cache_paths() -> dict[str, list[Path]]:
     system = platform.system()
 
     if system == "Darwin":
-        app_support = Path.home() / "Library" / "Application Support"
+        home = Path.home()
+        app_support = home / "Library" / "Application Support"
+        caches = home / "Library" / "Caches"
         return {
             "discord": [
                 app_support / "discord" / "Cache" / "Cache_Data",
+            ],
+            "discord-canary": [
                 app_support / "discordcanary" / "Cache" / "Cache_Data",
+            ],
+            "discord-ptb": [
                 app_support / "discordptb" / "Cache" / "Cache_Data",
             ],
             "slack": [
                 app_support / "Slack" / "Cache" / "Cache_Data",
+            ],
+            "chrome": [
+                caches / "Google" / "Chrome" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "chromium": [
+                caches / "Chromium" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "brave": [
+                app_support / "BraveSoftware" / "Brave-Browser" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "edge": [
+                app_support / "Microsoft Edge" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "telegram": [
+                Path.home() / ".local" / "share" / "TelegramDesktop" / "tdata" / "user_data" / "cache",
+                app_support / "Telegram Desktop" / "tdata" / "user_data" / "cache",
+            ],
+            "teams": [
+                app_support / "Microsoft Teams" / "Cache" / "Cache_Data",
+                app_support / "teams" / "Cache" / "Cache_Data",
             ],
         }
 
@@ -81,15 +107,39 @@ def _get_cache_paths() -> dict[str, list[Path]]:
         return {
             "discord": [
                 appdata / "discord" / "Cache" / "Cache_Data",
-                appdata / "discordcanary" / "Cache" / "Cache_Data",
-                appdata / "discordptb" / "Cache" / "Cache_Data",
                 localappdata / "discord" / "Cache" / "Cache_Data",
+            ],
+            "discord-canary": [
+                appdata / "discordcanary" / "Cache" / "Cache_Data",
                 localappdata / "discordcanary" / "Cache" / "Cache_Data",
+            ],
+            "discord-ptb": [
+                appdata / "discordptb" / "Cache" / "Cache_Data",
                 localappdata / "discordptb" / "Cache" / "Cache_Data",
             ],
             "slack": [
                 appdata / "Slack" / "Cache" / "Cache_Data",
                 localappdata / "Slack" / "Cache" / "Cache_Data",
+            ],
+            "chrome": [
+                localappdata / "Google" / "Chrome" / "User Data" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "chromium": [
+                localappdata / "Chromium" / "User Data" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "brave": [
+                localappdata / "BraveSoftware" / "Brave-Browser" / "User Data" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "edge": [
+                localappdata / "Microsoft" / "Edge" / "User Data" / "Default" / "Cache" / "Cache_Data",
+            ],
+            "telegram": [
+                appdata / "Telegram Desktop" / "tdata" / "user_data" / "cache",
+                localappdata / "Telegram Desktop" / "tdata" / "user_data" / "cache",
+            ],
+            "teams": [
+                appdata / "Microsoft" / "Teams" / "Cache" / "Cache_Data",
+                localappdata / "Microsoft" / "Teams" / "Cache" / "Cache_Data",
             ],
         }
 
@@ -98,16 +148,42 @@ def _get_cache_paths() -> dict[str, list[Path]]:
     return {
         "discord": [
             config / "discord" / "Cache" / "Cache_Data",
+        ],
+        "discord-canary": [
             config / "discordcanary" / "Cache" / "Cache_Data",
+        ],
+        "discord-ptb": [
             config / "discordptb" / "Cache" / "Cache_Data",
         ],
         "slack": [
             config / "Slack" / "Cache" / "Cache_Data",
         ],
+        "chrome": [
+            config / "google-chrome" / "Default" / "Cache" / "Cache_Data",
+        ],
+        "chromium": [
+            config / "chromium" / "Default" / "Cache" / "Cache_Data",
+        ],
+        "brave": [
+            config / "BraveSoftware" / "Brave-Browser" / "Default" / "Cache" / "Cache_Data",
+        ],
+        "edge": [
+            config / "microsoft-edge" / "Default" / "Cache" / "Cache_Data",
+        ],
+        "telegram": [
+            Path.home() / ".local" / "share" / "TelegramDesktop" / "tdata" / "user_data" / "cache",
+        ],
+        "teams": [
+            config / "teams" / "Cache" / "Cache_Data",
+            config / "teams-for-linux" / "Cache" / "Cache_Data",
+        ],
     }
 
 
 CACHE_PATHS: dict[str, list[Path]] = _get_cache_paths()
+
+# All known app identifiers (used for --app all)
+ALL_APPS: list[str] = list(CACHE_PATHS.keys())
 
 MIME_EXTENSIONS: dict[str, str] = {
     "image/png": ".png",
@@ -121,6 +197,19 @@ MIME_EXTENSIONS: dict[str, str] = {
 
 
 def find_cache_dirs(app: str = "discord") -> list[Path]:
+    """Return existing cache directories for the given app name.
+
+    Pass app="all" to collect directories for every known app.
+    """
+    if app.lower() == "all":
+        seen: set[Path] = set()
+        result: list[Path] = []
+        for paths in CACHE_PATHS.values():
+            for p in paths:
+                if p not in seen and p.exists() and p.is_dir():
+                    seen.add(p)
+                    result.append(p)
+        return result
     candidates = CACHE_PATHS.get(app.lower(), [])
     return [p for p in candidates if p.exists() and p.is_dir()]
 
@@ -161,7 +250,14 @@ def identify_file_type(path: Path) -> str:
     return _classify_bytes(data)
 
 
-def scan_cache(cache_dir: Path) -> list[CacheEntry]:
+def scan_cache(cache_dir: Path, app_source: str | None = None) -> list[CacheEntry]:
+    """Scan a single cache directory and return all CacheEntry objects.
+
+    Each entry's ``modified`` (and ``mtime``) field is populated from
+    ``stat().st_mtime`` so callers can filter by timestamp without touching
+    the filesystem again.  ``app_source`` is stored verbatim on every entry
+    for multi-app scans.
+    """
     entries: list[CacheEntry] = []
     for path in cache_dir.iterdir():
         if not path.is_file():
@@ -173,5 +269,21 @@ def scan_cache(cache_dir: Path) -> list[CacheEntry]:
             size=stat.st_size,
             mime_type=mime,
             modified=stat.st_mtime,
+            mtime=stat.st_mtime,
+            ctime=stat.st_ctime,
+            app_source=app_source,
         ))
+    return entries
+
+
+def scan_all_apps() -> list[CacheEntry]:
+    """Scan every known app's cache dirs and label entries with ``app_source``.
+
+    Only directories that actually exist on disk are visited.  Apps with no
+    cache present are silently skipped.
+    """
+    entries: list[CacheEntry] = []
+    for app in ALL_APPS:
+        for cache_dir in find_cache_dirs(app):
+            entries.extend(scan_cache(cache_dir, app_source=app))
     return entries

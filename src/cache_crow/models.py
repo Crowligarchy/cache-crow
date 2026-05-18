@@ -1,3 +1,4 @@
+import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -56,10 +57,44 @@ class CacheMetadata:
             return None
 
 
+def relative_time(ts: float) -> str:
+    """Return a human-readable relative time string for a Unix timestamp.
+
+    Examples: "just now", "5 minutes ago", "2 hours ago", "3 days ago".
+    """
+    now = _time.time()
+    diff = now - ts
+    if diff < 0:
+        diff = 0
+
+    if diff < 60:
+        return "just now"
+    if diff < 3600:
+        minutes = int(diff // 60)
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+    if diff < 86400:
+        hours = int(diff // 3600)
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    if diff < 86400 * 7:
+        days = int(diff // 86400)
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    if diff < 86400 * 30:
+        weeks = int(diff // (86400 * 7))
+        return f"{weeks} week{'s' if weeks != 1 else ''} ago"
+    if diff < 86400 * 365:
+        months = int(diff // (86400 * 30))
+        return f"{months} month{'s' if months != 1 else ''} ago"
+    years = int(diff // (86400 * 365))
+    return f"{years} year{'s' if years != 1 else ''} ago"
+
+
 @dataclass
 class CacheEntry:
     path: Path
     size: int
     mime_type: str
     modified: float
+    mtime: float = 0.0
+    ctime: float = 0.0
     metadata: CacheMetadata | None = field(default=None, compare=False)
+    app_source: str | None = field(default=None, compare=False)
