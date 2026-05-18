@@ -377,10 +377,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--format",
-        choices=["table", "json"],
+        choices=["table", "json", "csv", "html"],
         default="table",
         metavar="FORMAT",
-        help="Output format: table (default) or json (pipe-friendly)",
+        help=(
+            "Output format: table (default), json (pipe-friendly), "
+            "csv, or html (self-contained report)"
+        ),
     )
     parser.add_argument(
         "--metadata",
@@ -929,6 +932,19 @@ def main() -> None:
             print(json.dumps(all_stats, indent=2))
             return
 
+        if args.format == "csv":
+            from .exporters import export_csv
+            dest = output_dir / "report.csv"
+            export_csv(media_entries, output_path=dest)
+            console.print(f"[green]CSV report:[/green] {dest} ({len(media_entries)} entries)")
+            return
+
+        if args.format == "html":
+            from .exporters import export_html
+            dest = output_dir / "report.html"
+            export_html(media_entries, output_path=dest, embed_thumbnails=False)
+            console.print(f"[green]HTML report:[/green] {dest} ({len(media_entries)} entries)")
+
         result_table = Table(title="Extraction Results", show_lines=True)
         result_table.add_column("Metric", style="cyan")
         result_table.add_column("Value", justify="right")
@@ -984,6 +1000,22 @@ def main() -> None:
                 rec["channel_id"] = e.metadata.channel_id
                 rec["cdn_filename"] = e.metadata.cdn_filename
             print(json.dumps(rec))
+        return
+
+    # --- CSV output mode (no --output-dir: write to stdout) ---
+    if args.format == "csv":
+        from .exporters import export_csv
+        csv_text = export_csv(media_entries)
+        sys.stdout.write(csv_text)
+        return
+
+    # --- HTML output mode (no --output-dir: timestamped file in cwd) ---
+    if args.format == "html":
+        from .exporters import export_html
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = Path(f"cache_crow_{ts}.html")
+        export_html(media_entries, output_path=dest, embed_thumbnails=True)
+        console.print(f"[green]HTML report:[/green] {dest} ({len(media_entries)} entries)")
         return
 
     # --- Gallery (no --output-dir: embed as base64) ---
